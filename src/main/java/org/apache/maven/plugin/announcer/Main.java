@@ -176,10 +176,10 @@ public class Main
                 {
                     if ( updateIndex() )
                     {
-                        nextUpdate = System.nanoTime() + TimeUnit.HOURS.toNanos( 1 );
                         canAnnounce = true;
                     }
                     canAnnounce |= first;
+                    nextUpdate = System.nanoTime() + TimeUnit.MINUTES.toNanos( 1 );
                     first = false;
                 }
                 if ( canAnnounce )
