@@ -45,7 +45,6 @@ import org.apache.maven.index.updater.ResourceFetcher;
 import org.apache.maven.index.updater.WagonHelper;
 import org.apache.maven.wagon.Wagon;
 import org.apache.maven.wagon.events.TransferEvent;
-import org.apache.maven.wagon.events.TransferListener;
 import org.apache.maven.wagon.observers.AbstractTransferListener;
 import org.codehaus.plexus.DefaultContainerConfiguration;
 import org.codehaus.plexus.DefaultPlexusContainer;
@@ -164,6 +163,22 @@ public class Main
             indexer.createIndexingContext( "central-context", "central", centralLocalCache, centralIndexDir,
                                            "http://repo1.maven.org/maven2", null, true, true, indexers );
 
+        httpWagon.addTransferListener( new AbstractTransferListener()
+        {
+            public void transferStarted( TransferEvent transferEvent )
+            {
+                LOGGER.info( "Downloading {}", transferEvent.getResource().getName() );
+            }
+
+            public void transferProgress( TransferEvent transferEvent, byte[] buffer, int length )
+            {
+            }
+
+            public void transferCompleted( TransferEvent transferEvent )
+            {
+                LOGGER.info( "Done" );
+            }
+        } );
         long nextUpdate = System.nanoTime();
         boolean first = true;
 
@@ -372,23 +387,7 @@ public class Main
         LOGGER.info( "Updating Index..." );
         // Create ResourceFetcher implementation to be used with IndexUpdateRequest
         // Here, we use Wagon based one as shorthand, but all we need is a ResourceFetcher implementation
-        TransferListener listener = new AbstractTransferListener()
-        {
-            public void transferStarted( TransferEvent transferEvent )
-            {
-                LOGGER.info( "Downloading {}", transferEvent.getResource().getName() );
-            }
-
-            public void transferProgress( TransferEvent transferEvent, byte[] buffer, int length )
-            {
-            }
-
-            public void transferCompleted( TransferEvent transferEvent )
-            {
-                LOGGER.info( "Done" );
-            }
-        };
-        ResourceFetcher resourceFetcher = new WagonHelper.WagonFetcher( httpWagon, listener, null, null );
+        ResourceFetcher resourceFetcher = new WagonHelper.WagonFetcher( httpWagon, null, null, null );
 
         Date centralContextCurrentTimestamp = centralContext.getTimestamp();
         IndexUpdateRequest updateRequest = new IndexUpdateRequest( centralContext, resourceFetcher );
