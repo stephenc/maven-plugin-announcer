@@ -348,7 +348,7 @@ public class Main
         int count = prefix.length() + " ".length() + " version ".length() + shortVersion.length() + " at ".length()
             + " ".length() + Math.min( url.length(), urlLength );
         int remaining = 140 - count;
-        String name = StringUtils.defaultString( ai.name );
+        String name = StringUtils.defaultString( ai.name, ai.artifactId );
         int index1 = name.indexOf( "${" );
         int index2 = index1 == -1 ? -1 : name.indexOf( "}", index1 + 2 );
         StringBuilder nameBuilder = new StringBuilder( name.length() );
