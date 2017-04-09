@@ -230,7 +230,7 @@ public class Main
         throws IOException, InterruptedException
     {
         Query q = indexer.constructQuery( MAVEN.PACKAGING, new SourcedSearchExpression( "maven-plugin" ) );
-        Grouping g = new GAGrouping();
+        Grouping g = new GAGrouping( ArtifactInfo.VERSION_COMPARATOR.reversed() );
 
         GroupedSearchResponse response = indexer.searchGrouped( new GroupedSearchRequest( q, g, centralContext ) );
 
@@ -396,7 +396,7 @@ public class Main
         tweet.append( " " );
         tweet.append( url );
         if ( twitter != null )
-        {                     
+        {
             StatusUpdate status = new StatusUpdate( tweet.toString() );
             status.setDisplayCoordinates( false );
             status.setPossiblySensitive( false );
