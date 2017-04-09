@@ -348,11 +348,47 @@ public class Main
         int count = prefix.length() + " ".length() + " version ".length() + shortVersion.length() + " at ".length()
             + " ".length() + Math.min( url.length(), urlLength );
         int remaining = 140 - count;
-        int gaLength = Math.min( ga.length(), Math.min( remaining / 2, remaining - ai.name.length() ) );
+        String name = StringUtils.defaultString( ai.name );
+        int index1 = name.indexOf( "${" );
+        int index2 = index1 == -1 ? -1 : name.indexOf( "}", index1 + 2 );
+        StringBuilder nameBuilder = new StringBuilder( name.length() );
+        int last = 0;
+        while ( index1 != -1 && index2 != -1 )
+        {
+            nameBuilder.append( name.substring( last, index1 ) );
+            String expr = name.substring( index1 + 2, index2 );
+            switch ( expr.trim() )
+            {
+                case "groupId":
+                case "project.groupId":
+                case "pom.groupId":
+                    nameBuilder.append( ai.groupId );
+                    break;
+                case "artifactId":
+                case "project.artifactId":
+                case "pom.artifactId":
+                    nameBuilder.append( ai.artifactId );
+                    break;
+                default:
+                    nameBuilder.append( "${" );
+                    nameBuilder.append( expr );
+                    nameBuilder.append( "}" );
+                    break;
+            }
+            last = index2 + 1;
+            index1 = name.indexOf( "${", last );
+            index2 = index1 == -1 ? -1 : name.indexOf( "}", index1 + 2 );
+        }
+        if ( last > 0 )
+        {
+            nameBuilder.append( name.substring( last ) );
+            name = nameBuilder.toString();
+        }
+        int gaLength = Math.min( ga.length(), Math.min( remaining / 2, remaining - name.length() ) );
         remaining = remaining - gaLength;
         tweet.append( prefix );
         tweet.append( " " );
-        tweet.append( StringUtils.abbreviate( ai.name, remaining ) );
+        tweet.append( StringUtils.abbreviate( name, remaining ) );
         tweet.append( " version " );
         tweet.append( shortVersion );
         tweet.append( " at " );
@@ -360,7 +396,7 @@ public class Main
         tweet.append( " " );
         tweet.append( url );
         if ( twitter != null )
-        {
+        {                     
             StatusUpdate status = new StatusUpdate( tweet.toString() );
             status.setDisplayCoordinates( false );
             status.setPossiblySensitive( false );
