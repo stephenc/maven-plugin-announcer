@@ -384,8 +384,8 @@ public class Main
             nameBuilder.append( name.substring( last ) );
             name = nameBuilder.toString();
         }
-        int gaLength = Math.min( ga.length(), Math.min( remaining / 2, remaining - name.length() ) );
-        remaining = remaining - gaLength;
+        int gaLength = Math.max( 4, Math.min( ga.length(), Math.min( remaining / 2, remaining - name.length() ) ) );
+        remaining = Math.max( 4, remaining - gaLength );
         tweet.append( prefix );
         tweet.append( " " );
         tweet.append( StringUtils.abbreviate( name, remaining ) );
