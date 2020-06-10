@@ -343,11 +343,11 @@ public class Main
     {
         String ga = ai.groupId + ":" + ai.artifactId;
         String url = url( ai );
-        StringBuilder tweet = new StringBuilder( 140 );
+        StringBuilder tweet = new StringBuilder( 280 );
         String shortVersion = StringUtils.abbreviate( ai.version, 50 );
         int count = prefix.length() + " ".length() + " version ".length() + shortVersion.length() + " at ".length()
             + " ".length() + Math.min( url.length(), urlLength );
-        int remaining = 140 - count;
+        int remaining = 280 - count;
         String name = StringUtils.defaultString( ai.name, ai.artifactId );
         int index1 = name.indexOf( "${" );
         int index2 = index1 == -1 ? -1 : name.indexOf( "}", index1 + 2 );
