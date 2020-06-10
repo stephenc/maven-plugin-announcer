@@ -161,7 +161,7 @@ public class Main
         // Create context for central repository index
         centralContext =
             indexer.createIndexingContext( "central-context", "central", centralLocalCache, centralIndexDir,
-                                           "http://repo1.maven.org/maven2", null, true, true, indexers );
+                                           "https://repo.maven.apache.org/maven2", null, true, true, indexers );
 
         httpWagon.addTransferListener( new AbstractTransferListener()
         {
