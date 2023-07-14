@@ -1,24 +1,35 @@
 /*
- * Licensed to the Apache Software Foundation(ASF)under one
- * or more contributor license agreements.See the NOTICE file
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
- * regarding copyright ownership.The ASF licenses this file
- * to you under the Apache License,Version2.0(the
- * "License");you may not use this file except in compliance
- * with the License.You may obtain a copy of the License at
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
- * "AS IS"BASIS,WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND,either express or implied.See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
-
 package org.apache.maven.plugin.announcer;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+import io.github.redouane59.twitter.TwitterClient;
+import io.github.redouane59.twitter.signature.TwitterCredentials;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -57,30 +68,24 @@ import org.mapdb.DBMaker;
 import org.mapdb.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import twitter4j.StatusUpdate;
-import twitter4j.Twitter;
-import twitter4j.TwitterException;
-import twitter4j.TwitterFactory;
-import twitter4j.conf.ConfigurationBuilder;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
+/**
+ * Entrypoint.
+ */
+public class Main implements AutoCloseable {
 
-public class Main
-    implements AutoCloseable
-{
+    private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
 
-    private static final Logger LOGGER = LoggerFactory.getLogger( Main.class );
+    private static final Option HELP_OPT =
+            Option.builder("?").longOpt("help").desc("Print this help message").build();
 
-    private static final Option helpOpt =
-        Option.builder( "?" ).longOpt( "help" ).desc( "Print this help message" ).build();
+    protected static final long NANOS_PER_MILLI = 1000000L;
+
+    protected static final int MAX_TWEET_LENGTH = 280;
+
+    protected static final int MAX_VERSION_REPORT_LENGTH = 50;
+
+    protected static final int DEFAULT_SHORT_URL_LENGTH = 25;
 
     private final Options options;
 
@@ -98,366 +103,302 @@ public class Main
 
     private DB db;
 
-    public Main( String... args )
-        throws Exception
-    {
+    public Main(String... args) throws Exception {
         options = new Options();
-        for ( Option option : Arrays.asList( helpOpt ) )
-        {
-            options.addOption( option );
+        for (Option option : Collections.singletonList(HELP_OPT)) {
+            options.addOption(option);
         }
         CommandLineParser parser = new DefaultParser();
-        try
-        {
-            commandLine = parser.parse( options, args );
-        }
-        catch ( ParseException e )
-        {
+        try {
+            commandLine = parser.parse(options, args);
+        } catch (ParseException e) {
             HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp( "announcer", options );
+            formatter.printHelp("announcer", options);
             throw e;
         }
         final DefaultContainerConfiguration config = new DefaultContainerConfiguration();
-        config.setClassPathScanning( PlexusConstants.SCANNING_INDEX );
-        this.plexusContainer = new DefaultPlexusContainer( config );
+        config.setClassPathScanning(PlexusConstants.SCANNING_INDEX);
+        this.plexusContainer = new DefaultPlexusContainer(config);
 
         // lookup the indexer components from plexus
-        this.indexer = plexusContainer.lookup( Indexer.class );
-        this.indexUpdater = plexusContainer.lookup( IndexUpdater.class );
+        this.indexer = plexusContainer.lookup(Indexer.class);
+        this.indexUpdater = plexusContainer.lookup(IndexUpdater.class);
         // lookup wagon used to remotely fetch index
-        this.httpWagon = plexusContainer.lookup( Wagon.class, "http" );
+        this.httpWagon = plexusContainer.lookup(Wagon.class, "http");
     }
 
-    public static void main( String[] args )
-        throws Exception
-    {
-        try (Main main = new Main( args ))
-        {
+    public static void main(String[] args) throws Exception {
+        try (Main main = new Main(args)) {
             main.run();
         }
     }
 
-    public void run()
-        throws ComponentLookupException, IOException
-    {
-        for ( Option o : commandLine.getOptions() )
-        {
-            if ( o.equals( helpOpt ) )
-            {
+    public void run() throws ComponentLookupException, IOException {
+        for (Option o : commandLine.getOptions()) {
+            if (o.equals(HELP_OPT)) {
                 HelpFormatter formatter = new HelpFormatter();
-                formatter.printHelp( "announcer", options );
+                formatter.printHelp("announcer", options);
                 return;
             }
         }
-        File centralLocalCache = new File( "central-cache" );
-        File centralIndexDir = new File( "central-index" );
-        db = DBMaker.fileDB( new File( "work-db" ) ).transactionEnable().fileMmapEnableIfSupported().make();
+        File centralLocalCache = new File("central-cache");
+        File centralIndexDir = new File("central-index");
+        db = DBMaker.fileDB(new File("work-db"))
+                .transactionEnable()
+                .fileMmapEnableIfSupported()
+                .make();
 
         // Creators we want to use (search for fields it defines)
         List<IndexCreator> indexers = new ArrayList<IndexCreator>();
-        indexers.add( plexusContainer.lookup( IndexCreator.class, "min" ) );
-        indexers.add( plexusContainer.lookup( IndexCreator.class, "maven-plugin" ) );
+        indexers.add(plexusContainer.lookup(IndexCreator.class, "min"));
+        indexers.add(plexusContainer.lookup(IndexCreator.class, "maven-plugin"));
 
         // Create context for central repository index
-        centralContext =
-            indexer.createIndexingContext( "central-context", "central", centralLocalCache, centralIndexDir,
-                                           "https://repo.maven.apache.org/maven2", null, true, true, indexers );
+        centralContext = indexer.createIndexingContext(
+                "central-context",
+                "central",
+                centralLocalCache,
+                centralIndexDir,
+                "https://repo.maven.apache.org/maven2",
+                null,
+                true,
+                true,
+                indexers);
 
-        httpWagon.addTransferListener( new AbstractTransferListener()
-        {
-            public void transferStarted( TransferEvent transferEvent )
-            {
-                LOGGER.info( "Downloading {}", transferEvent.getResource().getName() );
+        httpWagon.addTransferListener(new AbstractTransferListener() {
+            public void transferStarted(TransferEvent transferEvent) {
+                LOGGER.info("Downloading {}", transferEvent.getResource().getName());
             }
 
-            public void transferProgress( TransferEvent transferEvent, byte[] buffer, int length )
-            {
-            }
+            public void transferProgress(TransferEvent transferEvent, byte[] buffer, int length) {}
 
-            public void transferCompleted( TransferEvent transferEvent )
-            {
-                LOGGER.info( "Done" );
+            public void transferCompleted(TransferEvent transferEvent) {
+                LOGGER.info("Done");
             }
-        } );
+        });
         long nextUpdate = System.nanoTime();
         boolean first = true;
 
-        try
-        {
-            while ( true )
-            {
+        try {
+            while (true) {
                 boolean canAnnounce = false;
-                if ( first || nextUpdate - System.nanoTime() <= 0 )
-                {
-                    if ( updateIndex() )
-                    {
+                if (first || nextUpdate - System.nanoTime() <= 0) {
+                    if (updateIndex()) {
                         canAnnounce = true;
                     }
                     canAnnounce |= first;
-                    nextUpdate = System.nanoTime() + TimeUnit.HOURS.toNanos( 1 );
+                    nextUpdate = System.nanoTime() + TimeUnit.HOURS.toNanos(1);
                     first = false;
                 }
-                if ( canAnnounce )
-                {
+                if (canAnnounce) {
                     findAndAnnounce();
                 }
                 long sleep = nextUpdate - System.nanoTime();
-                if ( sleep >= TimeUnit.MINUTES.toNanos( 1 ) )
-                {
-                    LOGGER.info( "Sleeping for {} minutes", TimeUnit.NANOSECONDS.toMinutes( sleep ) );
+                if (sleep >= TimeUnit.MINUTES.toNanos(1)) {
+                    LOGGER.info("Sleeping for {} minutes", TimeUnit.NANOSECONDS.toMinutes(sleep));
+                } else if (sleep >= TimeUnit.SECONDS.toNanos(1)) {
+                    LOGGER.info("Sleeping for {} seconds", TimeUnit.NANOSECONDS.toSeconds(sleep));
+                } else if (sleep > 0) {
+                    LOGGER.info("Sleeping for less than a second");
                 }
-                else if ( sleep >= TimeUnit.SECONDS.toNanos( 1 ) )
-                {
-                    LOGGER.info( "Sleeping for {} seconds", TimeUnit.NANOSECONDS.toSeconds( sleep ) );
-                }
-                else if ( sleep > 0 )
-                {
-                    LOGGER.info( "Sleeping for less than a second" );
-                }
-                if ( sleep > 0 )
-                {
-                    Thread.sleep( TimeUnit.NANOSECONDS.toMillis( sleep ), Math.max( 0, (int) ( sleep % 1000000L ) ) );
+                if (sleep > 0) {
+                    Thread.sleep(TimeUnit.NANOSECONDS.toMillis(sleep), Math.max(0, (int) (sleep % NANOS_PER_MILLI)));
                 }
             }
-        }
-        catch ( InterruptedException e )
-        {
-            LOGGER.info( "Interrupted", e );
+        } catch (InterruptedException e) {
+            LOGGER.info("Interrupted", e);
         }
     }
 
-    private void findAndAnnounce()
-        throws IOException, InterruptedException
-    {
-        Query q = indexer.constructQuery( MAVEN.PACKAGING, new SourcedSearchExpression( "maven-plugin" ) );
-        Grouping g = new GAGrouping( ArtifactInfo.VERSION_COMPARATOR.reversed() );
+    private void findAndAnnounce() throws IOException, InterruptedException {
+        Query q = indexer.constructQuery(MAVEN.PACKAGING, new SourcedSearchExpression("maven-plugin"));
+        Grouping g = new GAGrouping(ArtifactInfo.VERSION_COMPARATOR.reversed());
 
-        GroupedSearchResponse response = indexer.searchGrouped( new GroupedSearchRequest( q, g, centralContext ) );
+        GroupedSearchResponse response = indexer.searchGrouped(new GroupedSearchRequest(q, g, centralContext));
 
-        Atomic.Boolean seeded = db.atomicBoolean( "seeded" ).createOrOpen();
-        Set<String> knownPlugins = db.hashSet( "knownPlugins", Serializer.STRING ).createOrOpen();
-        Set<String> knownVersions = db.hashSet( "knownVersions", Serializer.STRING ).createOrOpen();
+        Atomic.Boolean seeded = db.atomicBoolean("seeded").createOrOpen();
+        Set<String> knownPlugins = db.hashSet("knownPlugins", Serializer.STRING).createOrOpen();
+        Set<String> knownVersions =
+                db.hashSet("knownVersions", Serializer.STRING).createOrOpen();
 
-        boolean canAnnounce = Boolean.TRUE.equals( seeded.get() );
-        int urlLength = 25;
-        Twitter twitter;
-        if ( canAnnounce )
-        {
-            String consumerKey = System.getenv( "CONSUMER_KEY" );
-            String consumerSecret = System.getenv( "CONSUMER_SECRET" );
-            String accessToken = System.getenv( "ACCESS_TOKEN" );
-            String accessTokenSecret = System.getenv( "ACCESS_TOKEN_SECRET" );
-            if ( StringUtils.isBlank( consumerKey ) || StringUtils.isBlank( consumerSecret ) || StringUtils.isBlank(
-                accessToken ) || StringUtils.isBlank( accessTokenSecret ) )
-            {
+        boolean canAnnounce = Boolean.TRUE.equals(seeded.get());
+        int urlLength = DEFAULT_SHORT_URL_LENGTH;
+        TwitterClient twitter;
+        if (canAnnounce) {
+            String apiKey = System.getenv("API_KEY");
+            String apiSecret = System.getenv("API_SECRET");
+            String accessToken = System.getenv("ACCESS_TOKEN");
+            String accessTokenSecret = System.getenv("ACCESS_TOKEN_SECRET");
+            String bearerToken = System.getenv("BEARER_TOKEN_SECRET");
+            if (StringUtils.isBlank(apiKey)
+                    || StringUtils.isBlank(apiSecret)
+                    || StringUtils.isBlank(accessToken)
+                    || StringUtils.isBlank(accessTokenSecret)) {
                 LOGGER.warn(
-                    "You must provide all four environment variables (CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN"
-                        + " and ACCESS_TOKEN_SECRET) to enable tweeting" );
+                        "You must provide all four environment variables (CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN"
+                                + " and ACCESS_TOKEN_SECRET) to enable tweeting");
                 twitter = null;
+            } else {
+                twitter = new TwitterClient(
+                        new TwitterCredentials(apiKey, apiSecret, accessToken, accessTokenSecret, bearerToken));
             }
-            else
-            {
-                ConfigurationBuilder cb = new ConfigurationBuilder();
-                cb.setOAuthConsumerKey( consumerKey );
-                cb.setOAuthConsumerSecret( consumerSecret );
-                cb.setOAuthAccessToken( accessToken );
-                cb.setOAuthAccessTokenSecret( accessTokenSecret );
-                twitter = new TwitterFactory( cb.build() ).getInstance();
-                try
-                {
-                    urlLength = twitter.getAPIConfiguration().getShortURLLengthHttps();
-                }
-                catch ( TwitterException e )
-                {
-                    LOGGER.warn( "Could not get the Twitter API configuration", e );
-                }
-            }
-        }
-        else
-        {
+        } else {
             twitter = null;
         }
 
-        try
-        {
+        try {
             int pluginCount = 0;
             int announceCount = 0;
             int versionCount = 0;
-            LOGGER.info( canAnnounce ? "Looking for plugins to announce" : "Recording initial list of plugins" );
-            for ( Map.Entry<String, ArtifactInfoGroup> entry : response.getResults().entrySet() )
-            {
+            LOGGER.info(canAnnounce ? "Looking for plugins to announce" : "Recording initial list of plugins");
+            for (Map.Entry<String, ArtifactInfoGroup> entry :
+                    response.getResults().entrySet()) {
                 pluginCount++;
                 versionCount += entry.getValue().getArtifactInfos().size();
                 ArtifactInfo ai = entry.getValue().getArtifactInfos().iterator().next();
-                String ga = ai.groupId + ":" + ai.artifactId;
-                if ( !knownPlugins.contains( ga ) )
-                {
-                    if ( canAnnounce )
-                    {
-                        if ( ai.name != null )
-                        {
+                String ga = ai.getGroupId() + ":" + ai.getArtifactId();
+                if (!knownPlugins.contains(ga)) {
+                    if (canAnnounce) {
+                        if (ai.getName() != null) {
                             announceCount++;
-                            announce( "New plugin!", urlLength, twitter, ai );
+                            announce("New plugin!", urlLength, twitter, ai);
                         }
                     }
-                    knownPlugins.add( ga );
-                    for ( ArtifactInfo a : entry.getValue().getArtifactInfos() )
-                    {
-                        knownVersions.add( ga + ":" + a.version );
+                    knownPlugins.add(ga);
+                    for (ArtifactInfo a : entry.getValue().getArtifactInfos()) {
+                        knownVersions.add(ga + ":" + a.getVersion());
                     }
-                }
-                else
-                {
-                    for ( ArtifactInfo a : entry.getValue().getArtifactInfos() )
-                    {
-                        String gav = ga + ":" + a.version;
-                        if ( !knownVersions.contains( gav ) )
-                        {
-                            if ( canAnnounce )
-                            {
+                } else {
+                    for (ArtifactInfo a : entry.getValue().getArtifactInfos()) {
+                        String gav = ga + ":" + a.getVersion();
+                        if (!knownVersions.contains(gav)) {
+                            if (canAnnounce) {
                                 announceCount++;
-                                announce( "New release!", urlLength, twitter, a );
+                                announce("New release!", urlLength, twitter, a);
                             }
-                            knownVersions.add( gav );
+                            knownVersions.add(gav);
                         }
                     }
                 }
-                if ( pluginCount % 100 == 0 )
-                {
-                    LOGGER.info( "Found {} plugins with a total of {} versions so far", pluginCount, versionCount );
+                if (pluginCount % 100 == 0) {
+                    LOGGER.info("Found {} plugins with a total of {} versions so far", pluginCount, versionCount);
                     db.commit();
                 }
             }
-            LOGGER.info( "Processed {} plugins with a total of {} versions and announced {} releases", pluginCount,
-                         versionCount, announceCount );
-            seeded.set( true );
-        }
-        finally
-        {
+            LOGGER.info(
+                    "Processed {} plugins with a total of {} versions and announced {} releases",
+                    pluginCount,
+                    versionCount,
+                    announceCount);
+            seeded.set(true);
+        } finally {
             db.commit();
         }
     }
 
-    private void announce( String prefix, int urlLength, Twitter twitter, ArtifactInfo ai )
-        throws InterruptedException
-    {
-        String ga = ai.groupId + ":" + ai.artifactId;
-        String url = url( ai );
-        StringBuilder tweet = new StringBuilder( 280 );
-        String shortVersion = StringUtils.abbreviate( ai.version, 50 );
-        int count = prefix.length() + " ".length() + " version ".length() + shortVersion.length() + " at ".length()
-            + " ".length() + Math.min( url.length(), urlLength );
-        int remaining = 280 - count;
-        String name = StringUtils.defaultString( ai.name, ai.artifactId );
-        int index1 = name.indexOf( "${" );
-        int index2 = index1 == -1 ? -1 : name.indexOf( "}", index1 + 2 );
-        StringBuilder nameBuilder = new StringBuilder( name.length() );
+    private void announce(String prefix, int urlLength, TwitterClient twitter, ArtifactInfo ai)
+            throws InterruptedException {
+        String ga = ai.getGroupId() + ":" + ai.getArtifactId();
+        String url = url(ai);
+        StringBuilder tweet = new StringBuilder(MAX_TWEET_LENGTH);
+        String shortVersion = StringUtils.abbreviate(ai.getVersion(), MAX_VERSION_REPORT_LENGTH);
+        int count = prefix.length()
+                + " ".length()
+                + " version ".length()
+                + shortVersion.length()
+                + " at ".length()
+                + " ".length()
+                + Math.min(url.length(), urlLength);
+        int remaining = MAX_TWEET_LENGTH - count;
+        String name = StringUtils.defaultString(ai.getName(), ai.getArtifactId());
+        int index1 = name.indexOf("${");
+        int index2 = index1 == -1 ? -1 : name.indexOf("}", index1 + 2);
+        StringBuilder nameBuilder = new StringBuilder(name.length());
         int last = 0;
-        while ( index1 != -1 && index2 != -1 )
-        {
-            nameBuilder.append( name.substring( last, index1 ) );
-            String expr = name.substring( index1 + 2, index2 );
-            switch ( expr.trim() )
-            {
+        while (index1 != -1 && index2 != -1) {
+            nameBuilder.append(name.substring(last, index1));
+            String expr = name.substring(index1 + 2, index2);
+            switch (expr.trim()) {
                 case "groupId":
                 case "project.groupId":
                 case "pom.groupId":
-                    nameBuilder.append( ai.groupId );
+                    nameBuilder.append(ai.getGroupId());
                     break;
                 case "artifactId":
                 case "project.artifactId":
                 case "pom.artifactId":
-                    nameBuilder.append( ai.artifactId );
+                    nameBuilder.append(ai.getArtifactId());
                     break;
                 default:
-                    nameBuilder.append( "${" );
-                    nameBuilder.append( expr );
-                    nameBuilder.append( "}" );
+                    nameBuilder.append("${");
+                    nameBuilder.append(expr);
+                    nameBuilder.append("}");
                     break;
             }
             last = index2 + 1;
-            index1 = name.indexOf( "${", last );
-            index2 = index1 == -1 ? -1 : name.indexOf( "}", index1 + 2 );
+            index1 = name.indexOf("${", last);
+            index2 = index1 == -1 ? -1 : name.indexOf("}", index1 + 2);
         }
-        if ( last > 0 )
-        {
-            nameBuilder.append( name.substring( last ) );
+        if (last > 0) {
+            nameBuilder.append(name.substring(last));
             name = nameBuilder.toString();
         }
-        int gaLength = Math.max( 4, Math.min( ga.length(), Math.min( remaining / 2, remaining - name.length() ) ) );
-        remaining = Math.max( 4, remaining - gaLength );
-        tweet.append( prefix );
-        tweet.append( " " );
-        tweet.append( StringUtils.abbreviate( name, remaining ) );
-        tweet.append( " version " );
-        tweet.append( shortVersion );
-        tweet.append( " at " );
-        tweet.append( StringUtils.abbreviate( ga, gaLength ) );
-        tweet.append( " " );
-        tweet.append( url );
-        if ( twitter != null )
-        {
-            StatusUpdate status = new StatusUpdate( tweet.toString() );
-            status.setDisplayCoordinates( false );
-            status.setPossiblySensitive( false );
-            try
-            {
-                twitter.updateStatus( status );
-            }
-            catch ( TwitterException e )
-            {
-                LOGGER.warn( "Could not announce {}", ai, e );
+        int gaLength = Math.max(4, Math.min(ga.length(), Math.min(remaining / 2, remaining - name.length())));
+        remaining = Math.max(4, remaining - gaLength);
+        tweet.append(prefix);
+        tweet.append(" ");
+        tweet.append(StringUtils.abbreviate(name, remaining));
+        tweet.append(" version ");
+        tweet.append(shortVersion);
+        tweet.append(" at ");
+        tweet.append(StringUtils.abbreviate(ga, gaLength));
+        tweet.append(" ");
+        tweet.append(url);
+        if (twitter != null) {
+            try {
+                twitter.postTweet(tweet.toString());
+            } catch (RuntimeException e) {
+                LOGGER.warn("Could not announce {}", ai, e);
             }
             // always wait 1 minute after tweeting
-            TimeUnit.MINUTES.sleep( 1 );
-        }
-        else
-        {
-            LOGGER.info( "Tweet: {}", tweet );
+            TimeUnit.MINUTES.sleep(1);
+        } else {
+            LOGGER.info("Tweet: {}", tweet);
         }
     }
 
-    private boolean updateIndex()
-        throws IOException
-    {
-        LOGGER.info( "Updating Index..." );
+    private boolean updateIndex() throws IOException {
+        LOGGER.info("Updating Index...");
         // Create ResourceFetcher implementation to be used with IndexUpdateRequest
         // Here, we use Wagon based one as shorthand, but all we need is a ResourceFetcher implementation
-        ResourceFetcher resourceFetcher = new WagonHelper.WagonFetcher( httpWagon, null, null, null );
+        ResourceFetcher resourceFetcher = new WagonHelper.WagonFetcher(httpWagon, null, null, null);
 
         Date centralContextCurrentTimestamp = centralContext.getTimestamp();
-        IndexUpdateRequest updateRequest = new IndexUpdateRequest( centralContext, resourceFetcher );
-        IndexUpdateResult updateResult = indexUpdater.fetchAndUpdateIndex( updateRequest );
-        if ( updateResult.isFullUpdate() )
-        {
-            LOGGER.info( "Full update completed" );
+        IndexUpdateRequest updateRequest = new IndexUpdateRequest(centralContext, resourceFetcher);
+        IndexUpdateResult updateResult = indexUpdater.fetchAndUpdateIndex(updateRequest);
+        if (updateResult.isFullUpdate()) {
+            LOGGER.info("Full update completed");
             return true;
-        }
-        else if ( updateResult.getTimestamp().equals( centralContextCurrentTimestamp ) )
-        {
-            LOGGER.info( "No update needed, index is up to date!" );
+        } else if (updateResult.getTimestamp().equals(centralContextCurrentTimestamp)) {
+            LOGGER.info("No update needed, index is up to date!");
             return false;
-        }
-        else
-        {
-            LOGGER.info( "Incremental update completed, change covered {} - {} period.", centralContextCurrentTimestamp,
-                         updateResult.getTimestamp() );
+        } else {
+            LOGGER.info(
+                    "Incremental update completed, change covered {} - {} period.",
+                    centralContextCurrentTimestamp,
+                    updateResult.getTimestamp());
             return true;
         }
     }
 
-    public String url( ArtifactInfo ai )
-    {
-        return "https://search.maven.org/#artifactdetails%7C" + ai.groupId + "%7C" + ai.artifactId + "%7C" + ai.version
-            + "%7Cpom";
+    public String url(ArtifactInfo ai) {
+        return "https://central.sonatype.org/artifact/" + ai.getGroupId() + "/" + ai.getArtifactId() + "/"
+                + ai.getVersion();
     }
 
     @Override
-    public void close()
-        throws Exception
-    {
-        if ( db != null )
-        {
+    public void close() throws Exception {
+        if (db != null) {
             db.close();
         }
     }

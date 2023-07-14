@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
 <!--
 Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
@@ -18,27 +17,26 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
 -->
-
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
     <groupId>org.apache.maven</groupId>
     <artifactId>maven-parent</artifactId>
-    <version>27</version>
-    <relativePath></relativePath>
+    <version>40</version>
+    <relativePath />
   </parent>
 
   <artifactId>maven-plugin-announcer</artifactId>
   <version>0.1-SNAPSHOT</version>
 
   <name>Apache Maven Plugin Announcer</name>
-  <description>
-    A twitter bot that announces Apache Maven plugin releases
-  </description>
+  <description>A twitter bot that announces Apache Maven plugin releases</description>
 
   <properties>
-    <javaVersion>8</javaVersion>
+    <javaVersion>17</javaVersion>
+    <maven.compiler.source>${javaVersion}</maven.compiler.source>
+    <maven.compiler.target>${javaVersion}</maven.compiler.target>
     <slf4j.version>1.7.25</slf4j.version>
   </properties>
 
@@ -56,7 +54,7 @@ under the License.
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-      <version>1.2.1</version>
+      <version>1.2.10</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
@@ -67,7 +65,7 @@ under the License.
     <dependency>
       <groupId>org.apache.maven.indexer</groupId>
       <artifactId>indexer-core</artifactId>
-      <version>5.1.1</version>
+      <version>6.0.0</version>
     </dependency>
     <!-- For ResourceFetcher implementation, if used -->
     <dependency>
@@ -95,9 +93,9 @@ under the License.
     </dependency>
 
     <dependency>
-      <groupId>org.twitter4j</groupId>
-      <artifactId>twitter4j-core</artifactId>
-      <version>4.0.6</version>
+      <groupId>io.github.redouane59.twitter</groupId>
+      <artifactId>twittered</artifactId>
+      <version>2.22</version>
     </dependency>
   </dependencies>
 
@@ -121,7 +119,7 @@ under the License.
         <plugin>
           <groupId>io.fabric8</groupId>
           <artifactId>docker-maven-plugin</artifactId>
-          <version>0.17.2</version>
+          <version>0.43.0</version>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -139,10 +137,10 @@ under the License.
         </configuration>
         <executions>
           <execution>
-            <phase>package</phase>
             <goals>
               <goal>assemble</goal>
             </goals>
+            <phase>package</phase>
           </execution>
         </executions>
       </plugin>
@@ -160,10 +158,10 @@ under the License.
                   <mode>dir</mode>
                   <inline>
                     <fileSets>
-                    <fileSet>
-                      <directory>${project.build.directory}/appassembler</directory>
-                      <outputDirectory>announcer</outputDirectory>
-                    </fileSet>
+                      <fileSet>
+                        <directory>${project.build.directory}/appassembler</directory>
+                        <outputDirectory>announcer</outputDirectory>
+                      </fileSet>
                     </fileSets>
                   </inline>
                 </assembly>
@@ -173,10 +171,10 @@ under the License.
         </configuration>
         <executions>
           <execution>
-            <phase>package</phase>
             <goals>
               <goal>build</goal>
             </goals>
+            <phase>package</phase>
           </execution>
         </executions>
       </plugin>
