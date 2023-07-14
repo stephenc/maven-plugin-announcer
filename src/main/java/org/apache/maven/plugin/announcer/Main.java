@@ -230,10 +230,8 @@ public class Main implements AutoCloseable {
             String accessToken = System.getenv("ACCESS_TOKEN");
             String accessTokenSecret = System.getenv("ACCESS_TOKEN_SECRET");
             String bearerToken = System.getenv("BEARER_TOKEN_SECRET");
-            if (StringUtils.isBlank(apiKey)
-                    || StringUtils.isBlank(apiSecret)) {
-                LOGGER.warn(
-                        "You must provide environment variables (API_KEY, API_SECRET) to enable tweeting");
+            if (StringUtils.isBlank(apiKey) || StringUtils.isBlank(apiSecret)) {
+                LOGGER.warn("You must provide environment variables (API_KEY, API_SECRET) to enable tweeting");
                 twitter = null;
             } else {
                 twitter = new TwitterClient(
