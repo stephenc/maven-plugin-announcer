@@ -366,7 +366,7 @@ public class Main implements AutoCloseable {
         LOGGER.info("Updating Index...");
         // Create ResourceFetcher implementation to be used with IndexUpdateRequest
         // Here, we use Wagon based one as shorthand, but all we need is a ResourceFetcher implementation
-        ResourceFetcher resourceFetcher = new WagonHelper.WagonFetcher(httpWagon, null, null, null);
+        ResourceFetcher resourceFetcher = new WagonHelper.WagonFetcher( httpWagon, null, null, null);
 
         Date centralContextCurrentTimestamp = centralContext.getTimestamp();
         IndexUpdateRequest updateRequest = new IndexUpdateRequest(centralContext, resourceFetcher);
