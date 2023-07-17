@@ -65,7 +65,7 @@ under the License.
     <dependency>
       <groupId>org.apache.maven.indexer</groupId>
       <artifactId>indexer-core</artifactId>
-      <version>6.0.0</version>
+      <version>5.1.1</version>
     </dependency>
     <!-- For ResourceFetcher implementation, if used -->
     <dependency>

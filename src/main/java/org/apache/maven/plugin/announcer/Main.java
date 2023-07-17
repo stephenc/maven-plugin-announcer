@@ -251,21 +251,21 @@ public class Main implements AutoCloseable {
                 pluginCount++;
                 versionCount += entry.getValue().getArtifactInfos().size();
                 ArtifactInfo ai = entry.getValue().getArtifactInfos().iterator().next();
-                String ga = ai.getGroupId() + ":" + ai.getArtifactId();
+                String ga = ai.groupId + ":" + ai.artifactId;
                 if (!knownPlugins.contains(ga)) {
                     if (canAnnounce) {
-                        if (ai.getName() != null) {
+                        if (ai.name != null) {
                             announceCount++;
                             announce("New plugin!", urlLength, twitter, ai);
                         }
                     }
                     knownPlugins.add(ga);
                     for (ArtifactInfo a : entry.getValue().getArtifactInfos()) {
-                        knownVersions.add(ga + ":" + a.getVersion());
+                        knownVersions.add(ga + ":" + a.version);
                     }
                 } else {
                     for (ArtifactInfo a : entry.getValue().getArtifactInfos()) {
-                        String gav = ga + ":" + a.getVersion();
+                        String gav = ga + ":" + a.version;
                         if (!knownVersions.contains(gav)) {
                             if (canAnnounce) {
                                 announceCount++;
@@ -293,10 +293,10 @@ public class Main implements AutoCloseable {
 
     private void announce(String prefix, int urlLength, TwitterClient twitter, ArtifactInfo ai)
             throws InterruptedException {
-        String ga = ai.getGroupId() + ":" + ai.getArtifactId();
+        String ga = ai.groupId + ":" + ai.artifactId;
         String url = url(ai);
         StringBuilder tweet = new StringBuilder(MAX_TWEET_LENGTH);
-        String shortVersion = StringUtils.abbreviate(ai.getVersion(), MAX_VERSION_REPORT_LENGTH);
+        String shortVersion = StringUtils.abbreviate(ai.version, MAX_VERSION_REPORT_LENGTH);
         int count = prefix.length()
                 + " ".length()
                 + " version ".length()
@@ -305,7 +305,7 @@ public class Main implements AutoCloseable {
                 + " ".length()
                 + Math.min(url.length(), urlLength);
         int remaining = MAX_TWEET_LENGTH - count;
-        String name = StringUtils.defaultString(ai.getName(), ai.getArtifactId());
+        String name = StringUtils.defaultString(ai.name, ai.artifactId);
         int index1 = name.indexOf("${");
         int index2 = index1 == -1 ? -1 : name.indexOf("}", index1 + 2);
         StringBuilder nameBuilder = new StringBuilder(name.length());
@@ -317,12 +317,12 @@ public class Main implements AutoCloseable {
                 case "groupId":
                 case "project.groupId":
                 case "pom.groupId":
-                    nameBuilder.append(ai.getGroupId());
+                    nameBuilder.append(ai.groupId);
                     break;
                 case "artifactId":
                 case "project.artifactId":
                 case "pom.artifactId":
-                    nameBuilder.append(ai.getArtifactId());
+                    nameBuilder.append(ai.artifactId);
                     break;
                 default:
                     nameBuilder.append("${");
@@ -387,8 +387,8 @@ public class Main implements AutoCloseable {
     }
 
     public String url(ArtifactInfo ai) {
-        return "https://central.sonatype.org/artifact/" + ai.getGroupId() + "/" + ai.getArtifactId() + "/"
-                + ai.getVersion();
+        return "https://central.sonatype.org/artifact/" + ai.groupId + "/" + ai.artifactId + "/"
+                + ai.version;
     }
 
     @Override
