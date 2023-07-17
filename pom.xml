@@ -95,7 +95,7 @@ under the License.
     <dependency>
       <groupId>io.github.redouane59.twitter</groupId>
       <artifactId>twittered</artifactId>
-      <version>2.22-SNAPSHOT</version>
+      <version>2.22</version>
     </dependency>
   </dependencies>
 
