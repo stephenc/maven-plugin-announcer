@@ -387,8 +387,7 @@ public class Main implements AutoCloseable {
     }
 
     public String url(ArtifactInfo ai) {
-        return "https://central.sonatype.org/artifact/" + ai.groupId + "/" + ai.artifactId + "/"
-                + ai.version;
+        return "https://central.sonatype.org/artifact/" + ai.groupId + "/" + ai.artifactId + "/" + ai.version;
     }
 
     @Override
